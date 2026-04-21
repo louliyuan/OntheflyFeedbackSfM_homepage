@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="title" content="On-the-fly Feedback SfM - Liyuan Lou et al.">
+  <meta name="description" content="On-the-fly Feedback SfM couples incremental reconstruction, online mesh quality assessment, and predictive path planning for adaptive UAV photogrammetry.">
+  <meta name="keywords" content="SfM, UAV photogrammetry, online reconstruction, mesh quality, path planning, real-time 3D mapping">
+  <meta name="author" content="Liyuan Lou, Wanyun Li, Wentian Gan, Yifei Yu, Tengfei Wang, Xin Wang, Zongqian Zhan">
+  <meta name="robots" content="index, follow">
+
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="IRIS-LAB-whu">
+  <meta property="og:title" content="On-the-fly Feedback SfM">
+  <meta property="og:description" content="Online Explore-and-Exploit UAV photogrammetry with mesh-quality-aware feedback and predictive path planning.">
+  <meta property="og:url" content="https://github.com/IRIS-LAB-whu/OntheflySfMFeedback">
+
+  <title>On-the-fly Feedback SfM | Project Page</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --ink-900: #0b1020;
+      --ink-700: #28334d;
+      --ink-500: #55617f;
+      --paper: #f4f7fb;
+      --card: #ffffff;
+      --line: #d8e0ee;
+      --accent: #0f766e;
+      --accent-2: #0ea5a4;
+      --accent-soft: #dcf5f1;
+      --sun: #f59e0b;
+      --radius: 16px;
+      --shadow-sm: 0 6px 20px rgba(14, 24, 45, 0.08);
+      --shadow-md: 0 14px 40px rgba(10, 20, 40, 0.13);
+      --max-width: 1080px;
+      --ease: 260ms cubic-bezier(.2,.7,.2,1);
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: linear-gradient(180deg, #f9fbff 0%, #f3f6fb 100%);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink-900);
+      font-family: "Manrope", "Segoe UI", sans-serif;
+      background: transparent;
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      width: 36rem;
+      height: 36rem;
+      border-radius: 999px;
+      z-index: -1;
+      filter: blur(65px);
+      opacity: 0.22;
+      pointer-events: none;
+    }
+
+    body::before {
+      top: -10rem;
+      left: -8rem;
+      background: #34d399;
+    }
+
+    body::after {
+      bottom: -12rem;
+      right: -7rem;
+      background: #f59e0b;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      backdrop-filter: saturate(1.2) blur(12px);
+      background: rgba(244, 247, 251, 0.8);
+      border-bottom: 1px solid transparent;
+      transition: var(--ease);
+    }
+
+    .topbar.scrolled {
+      border-color: var(--line);
+      box-shadow: 0 4px 24px rgba(15, 23, 42, 0.07);
+    }
+
+    .topbar-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0.8rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .brand {
+      font-family: "Sora", "Manrope", sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+      font-weight: 700;
+      color: var(--ink-900);
+      white-space: nowrap;
+    }
+
+    .section-links {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .section-links a {
+      color: var(--ink-700);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.86rem;
+      padding: 0.28rem 0.5rem;
+      border-radius: 999px;
+      transition: var(--ease);
+    }
+
+    .section-links a:hover {
+      color: var(--ink-900);
+      background: rgba(15, 118, 110, 0.12);
+    }
+
+    .container-limit {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    .hero-intro {
+      padding: 3.2rem 0 2.1rem;
+    }
+
+    .paper-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.32rem 0.72rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #115e59;
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      margin-bottom: 1.1rem;
+      border: 1px solid #a7f3d0;
+    }
+
+    .publication-title {
+      font-family: "Sora", "Manrope", sans-serif;
+      font-size: clamp(1.9rem, 2.7vw, 3rem);
+      line-height: 1.13;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.2rem;
+      color: var(--ink-900);
+    }
+
+    .publication-authors {
+      font-size: 1.03rem;
+      color: var(--ink-700);
+      line-height: 1.8;
+    }
+
+    .publication-authors .author-block {
+      display: inline-block;
+      margin-right: 0.2rem;
+    }
+
+    .affiliation {
+      margin-top: 0.2rem;
+      color: var(--ink-500);
+      font-size: 0.98rem;
+      font-weight: 600;
+    }
+
+    .equal-note {
+      color: var(--ink-500);
+      font-size: 0.92rem;
+      margin-top: 0.2rem;
+    }
+
+    .chip-row {
+      margin-top: 1.05rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.55rem;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink-700);
+      font-weight: 700;
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      border-radius: 999px;
+      padding: 0.35rem 0.72rem;
+    }
+
+    .publication-links {
+      margin-top: 1.45rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.72rem;
+    }
+
+    .publication-links .button {
+      border-radius: 12px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      transition: var(--ease);
+      box-shadow: var(--shadow-sm);
+      min-width: 126px;
+    }
+
+    .button.is-paper {
+      background: var(--ink-900);
+      color: #fff;
+    }
+
+    .button.is-paper:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      background: #111f3c;
+      color: #fff;
+    }
+
+    .button.is-code {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .button.is-code:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+      background: #0b635d;
+      color: #fff;
+    }
+
+    .button.is-ghost {
+      background: #fff;
+      border-color: var(--line);
+      color: var(--ink-700);
+    }
+
+    .button.is-ghost:hover {
+      transform: translateY(-2px);
+      color: var(--ink-900);
+      border-color: #b7c7df;
+      box-shadow: var(--shadow-md);
+    }
+
+    .button.is-disabled {
+      background: #eff3f8;
+      border-color: #d4deec;
+      color: #93a2bf;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .teaser-wrap {
+      margin-top: 1.5rem;
+      padding: 0.75rem;
+    }
+
+    .teaser-wrap img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+    }
+
+    .teaser-caption {
+      text-align: center;
+      font-size: 0.98rem;
+      color: var(--ink-500);
+      margin-top: 0.75rem;
+      padding-bottom: 0.2rem;
+    }
+
+    .section {
+      padding: 1.45rem 0;
+    }
+
+    .section .inner {
+      padding: 1.4rem;
+    }
+
+    .section-title {
+      font-family: "Sora", "Manrope", sans-serif;
+      font-size: clamp(1.35rem, 2vw, 1.9rem);
+      letter-spacing: -0.01em;
+      margin-bottom: 0.85rem;
+      color: var(--ink-900);
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .section-title .dot {
+      width: 0.52rem;
+      height: 0.52rem;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      flex: 0 0 auto;
+    }
+
+    .section p,
+    .section li {
+      color: var(--ink-700);
+      font-size: 1.01rem;
+      line-height: 1.74;
+    }
+
+    .section ul {
+      margin-top: 0.35rem;
+      margin-left: 1rem;
+    }
+
+    .method-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.85rem;
+      margin-top: 0.95rem;
+    }
+
+    .method-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      padding: 0.95rem;
+      transition: var(--ease);
+    }
+
+    .method-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .method-card h3 {
+      font-family: "Sora", "Manrope", sans-serif;
+      margin: 0 0 0.4rem;
+      font-size: 1.02rem;
+      color: var(--ink-900);
+    }
+
+    .method-card p {
+      margin: 0;
+      font-size: 0.95rem;
+      line-height: 1.62;
+      color: var(--ink-700);
+    }
+
+    .method-step {
+      color: var(--sun);
+      font-size: 0.92rem;
+      font-weight: 900;
+      margin-right: 0.45rem;
+      vertical-align: middle;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      margin-top: 0.9rem;
+    }
+
+    .custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 640px;
+      background: #fff;
+    }
+
+    .custom-table th,
+    .custom-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 0.72rem 0.78rem;
+      text-align: left;
+      font-size: 0.92rem;
+      color: var(--ink-700);
+    }
+
+    .custom-table th {
+      background: #f7f9fd;
+      color: var(--ink-900);
+      font-weight: 800;
+      font-size: 0.86rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .custom-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .video-placeholder {
+      display: grid;
+      place-items: center;
+      text-align: center;
+      min-height: 220px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #f5f7fd, #edf7f6);
+      border: 1px dashed #b7c6dd;
+      color: var(--ink-500);
+      padding: 1rem;
+    }
+
+    .video-placeholder i {
+      font-size: 1.8rem;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    .bibtex-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+    }
+
+    .copy-bibtex-btn {
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.55rem 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: var(--ease);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .copy-bibtex-btn:hover {
+      transform: translateY(-1px);
+      background: #0d6760;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .copy-bibtex-btn.copied {
+      background: #16a34a;
+    }
+
+    pre {
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #f8fbff;
+      padding: 0.95rem;
+      overflow-x: auto;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      color: #233048;
+      margin-top: 0.8rem;
+    }
+
+    .footer {
+      background: transparent;
+      padding: 2rem 0 2.6rem;
+      text-align: center;
+    }
+
+    .footer p {
+      color: var(--ink-500);
+      font-size: 0.91rem;
+    }
+
+    .footer a {
+      color: var(--accent);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .scroll-top {
+      position: fixed;
+      right: 1.2rem;
+      bottom: 1.2rem;
+      width: 46px;
+      height: 46px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--ink-900);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: var(--shadow-md);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: var(--ease);
+      z-index: 35;
+    }
+
+    .scroll-top.show {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 500ms ease, transform 500ms ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 900px) {
+      .topbar-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .section-links {
+        justify-content: flex-start;
+      }
+
+      .method-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .hero-intro {
+        padding-top: 2.2rem;
+      }
+
+      .publication-links .button {
+        min-width: 116px;
+      }
+
+      .section .inner {
+        padding: 1.05rem;
+      }
+
+      .publication-authors {
+        font-size: 0.96rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <div class="brand">ON-THE-FLY FEEDBACK SfM</div>
+      <nav class="section-links" aria-label="Section links">
+        <a href="#overview">Overview</a>
+        <a href="#abstract">Abstract</a>
+        <a href="#method">Method</a>
+        <a href="#experiments">Experiments</a>
+        <a href="#bibtex">BibTeX</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <button class="scroll-top" id="scrollTopBtn" type="button" aria-label="Scroll to top">
+    <i class="fas fa-arrow-up"></i>
+  </button>
+
+  <main>
+    <section class="hero-intro" id="overview">
+      <div class="container-limit has-text-centered">
+        <div class="paper-tag"><i class="fas fa-mountain-city"></i> Project Page</div>
+        <h1 class="publication-title">
+          On-the-fly Feedback SfM: Online Explore-and-Exploit UAV Photogrammetry with Incremental Mesh Quality-Aware Indicator and Predictive Path Planning
+        </h1>
+
+        <div class="publication-authors">
+          <span class="author-block">Liyuan Lou<sup>*</sup>,</span>
+          <span class="author-block">Wanyun Li<sup>*</sup>,</span>
+          <span class="author-block">Wentian Gan<sup>*</sup>,</span>
+          <span class="author-block">Yifei Yu,</span>
+          <span class="author-block">Tengfei Wang,</span>
+          <span class="author-block">Xin Wang,</span>
+          <span class="author-block">Zongqian Zhan</span>
+        </div>
+        <div class="affiliation">School of Geodesy and Geomatics, Wuhan University</div>
+        <div class="equal-note"><sup>*</sup> Indicates equal contribution</div>
+
+        <div class="chip-row">
+          <span class="chip">Near Real-Time</span>
+          <span class="chip">Incremental Reconstruction</span>
+          <span class="chip">Quality-Aware Planning</span>
+          <span class="chip">Explore-and-Exploit</span>
+        </div>
+
+        <div class="publication-links">
+          <a href="https://arxiv.org/abs/2512.02375" target="_blank" rel="noopener noreferrer" class="button is-paper">
+            <span class="icon"><i class="fas fa-file-pdf"></i></span>
+            <span>Paper</span>
+          </a>
+          <a href="https://github.com/IRIS-LAB-whu/OntheflySfMFeedback" target="_blank" rel="noopener noreferrer" class="button is-code">
+            <span class="icon"><i class="fab fa-github"></i></span>
+            <span>Code</span>
+          </a>
+          <span class="button is-disabled" aria-disabled="true">
+            <span class="icon"><i class="fas fa-video"></i></span>
+            <span>Demo Coming Soon</span>
+          </span>
+        </div>
+
+        <div class="panel teaser-wrap reveal">
+          <img src="assets/images/workflow_overview.jpg" alt="On-the-fly Feedback SfM workflow">
+          <div class="teaser-caption">The overall workflow of our On-the-fly Feedback SfM: each incoming UAV image batch is processed by SfM on-the-fly, followed by incremental surface reconstruction, online quality assessment, and predictive path planning.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="abstract">
+      <div class="container-limit">
+        <div class="panel inner reveal">
+          <h2 class="section-title"><span class="dot"></span>Abstract</h2>
+          <p>
+            Compared with conventional offline UAV photogrammetry, real-time photogrammetry is essential for time-critical geospatial applications such as disaster response and active digital-twin maintenance.
+            Most existing online methods process captured imagery in real time, but do not explicitly evaluate reconstruction quality on the fly or provide actionable guidance for follow-up acquisition.
+            This work presents On-the-fly Feedback SfM, an explore-and-exploit framework for adaptive UAV photogrammetry in near real time.
+          </p>
+          <p>
+            Built upon <a href="https://yifeiyu225.github.io/on-the-flySfMv2.github.io/" target="_blank" rel="noopener noreferrer">SfM on-the-fly</a>, our pipeline integrates: (1) online incremental coarse-mesh generation from dynamically expanding sparse points;
+            (2) online mesh quality assessment with actionable indicators; and (3) predictive path planning for on-the-fly trajectory refinement.
+            Experiments show improved in-situ reconstruction completeness and reduced coverage gaps and re-flight cost.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="method">
+      <div class="container-limit">
+        <div class="panel inner reveal">
+          <h2 class="section-title"><span class="dot"></span>Method</h2>
+          <p>
+            This section follows the methodology in the paper: an integrated explore-and-exploit working mode that couples incremental dynamic reconstruction, online reconstruction quality assessment, and predictive path planning into one continuously operating workflow.
+            After each small incoming batch (typically 5-20 images), the system executes one complete feedback cycle to update both reconstruction and trajectory in near real time.
+          </p>
+          <div class="method-grid">
+            <article class="method-card">
+              <h3><span class="method-step">◆</span>SfM on-the-fly Pose and Sparse Update</h3>
+              <p>Each incoming image batch is processed by SfM on-the-fly to update camera poses and the evolving sparse point cloud without interrupting UAV motion.</p>
+            </article>
+            <article class="method-card">
+              <h3><span class="method-step">◆</span>Online Incremental Surface Reconstruction</h3>
+              <p>The evolving sparse cloud is converted into a triangular surface mesh through dynamic Delaunay updates, ray-based energy accumulation, and dynamic graph-cut optimization.</p>
+            </article>
+            <article class="method-card">
+              <h3><span class="method-step">◆</span>Online Mesh Quality Assessment</h3>
+              <p>Per-face indicators, including ground sampling distance, observation redundancy, and reprojection error, are computed and fused into an ensemble quality score for low-quality region identification.</p>
+            </article>
+            <article class="method-card">
+              <h3><span class="method-step">◆</span>Mesh-Quality-Aware Predictive Path Planning</h3>
+              <p>Detected low-quality regions guide multi-constraint viewpoint generation, viewpoint sparsification, and lightweight trajectory optimization to produce an executable adaptive flight segment.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="experiments">
+      <div class="container-limit">
+        <div class="panel inner reveal">
+          <h2 class="section-title"><span class="dot"></span>Experiments and Datasets</h2>
+          <p>
+            Evaluations cover multiple UAV-captured and public datasets, spanning different platforms and resolutions, to verify robust online behavior under diverse scenarios.
+          </p>
+
+          <div class="table-wrap">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Dataset</th>
+                  <th>Images</th>
+                  <th>Platform</th>
+                  <th>Resolution</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>SHHY</td><td>770</td><td>DJI Mavic 2 Pro</td><td>1920 x 1080</td><td>Self-captured</td></tr>
+                <tr><td>PHANTOM</td><td>467</td><td>DJI Mavic 2 Pro</td><td>1920 x 1080</td><td>Bu et al., 2016</td></tr>
+                <tr><td>US3D</td><td>990</td><td>-</td><td>5472 x 3648</td><td>Lin et al., 2022</td></tr>
+                <tr><td>GYM</td><td>580</td><td>DJI Matrice 4T</td><td>4032 x 3024</td><td>Self-captured</td></tr>
+                <tr><td>YS</td><td>320</td><td>DJI Matrice 4T</td><td>4032 x 3024</td><td>Self-captured</td></tr>
+                <tr><td>XingHu</td><td>-</td><td>DJI Matrice 4T</td><td>4032 x 3024</td><td>Self-captured</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="video-placeholder" style="margin-top: 1rem;">
+            <div>
+              <i class="fas fa-film"></i>
+              <div><strong>Demo video placeholder</strong></div>
+              <div>Embed your MP4 or YouTube demo here when the video is ready.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="bibtex">
+      <div class="container-limit">
+        <div class="panel inner reveal">
+          <div class="bibtex-header">
+            <h2 class="section-title" style="margin-bottom: 0;"><span class="dot"></span>BibTeX</h2>
+            <button class="copy-bibtex-btn" id="copyBibBtn" type="button">
+              <i class="fas fa-copy"></i>
+              <span id="copyText">Copy</span>
+            </button>
+          </div>
+          <pre id="bibtexCode"><code>@misc{lou2025ontheflyfeedbacksfm,
+  title={On-the-fly Feedback SfM: Online Explore-and-Exploit UAV Photogrammetry with Incremental Mesh Quality-Aware Indicator and Predictive Path Planning},
+  author={Liyuan Lou and Wanyun Li and Wentian Gan and Yifei Yu and Tengfei Wang and Xin Wang and Zongqian Zhan},
+  year={2025},
+  eprint={2512.02375},
+  archivePrefix={arXiv},
+  primaryClass={cs.CV},
+  doi={10.48550/arXiv.2512.02375},
+  url={https://arxiv.org/abs/2512.02375}
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="contact">
+      <div class="container-limit">
+        <div class="panel inner reveal">
+          <h2 class="section-title"><span class="dot"></span>Contact</h2>
+          <p>School of Geodesy and Geomatics, Wuhan University, Wuhan 430079, China</p>
+          <p>Corresponding author: <a href="mailto:xwang@sgg.whu.edu.cn">xwang@sgg.whu.edu.cn</a></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container-limit">
+      <p>
+        This page follows the structure of
+        <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank" rel="noopener noreferrer">Academic Project Page Template</a>
+        and is adapted for On-the-fly Feedback SfM.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    const topbar = document.getElementById("topbar");
+    const scrollTopBtn = document.getElementById("scrollTopBtn");
+    const copyBtn = document.getElementById("copyBibBtn");
+    const copyText = document.getElementById("copyText");
+    const bibtexCode = document.getElementById("bibtexCode");
+
+    function onScroll() {
+      const y = window.scrollY;
+      if (y > 14) {
+        topbar.classList.add("scrolled");
+      } else {
+        topbar.classList.remove("scrolled");
+      }
+
+      if (y > 320) {
+        scrollTopBtn.classList.add("show");
+      } else {
+        scrollTopBtn.classList.remove("show");
+      }
+    }
+
+    window.addEventListener("scroll", onScroll);
+    onScroll();
+
+    scrollTopBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    copyBtn.addEventListener("click", async function () {
+      const text = bibtexCode.innerText;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const area = document.createElement("textarea");
+          area.value = text;
+          area.style.position = "fixed";
+          area.style.left = "-9999px";
+          document.body.appendChild(area);
+          area.focus();
+          area.select();
+          document.execCommand("copy");
+          area.remove();
+        }
+
+        copyBtn.classList.add("copied");
+        copyText.textContent = "Copied";
+        setTimeout(function () {
+          copyBtn.classList.remove("copied");
+          copyText.textContent = "Copy";
+        }, 1600);
+      } catch (error) {
+        copyText.textContent = "Failed";
+        setTimeout(function () {
+          copyText.textContent = "Copy";
+        }, 1600);
+      }
+    });
+
+    const observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+
+    document.querySelectorAll(".reveal").forEach(function (node) {
+      observer.observe(node);
+    });
+  </script>
+</body>
+</html>
